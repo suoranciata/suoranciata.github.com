@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>suoranciata's pages</title>
+    </head>
+    <body>
+        <h1>HOWTO setup ssl client authentication with openssl, nginx and backend of your choice and self signed certificates</h1>
+        <h3>step 1 - create the CA</h3>
+        <p>A certification authority is required for signing client certificates, so the steps for creating one are these:
+        <ul>
+            <li>
+                <div>
+                    <p>create the CA key
+                    <pre>openssl genrsa -out ca.key</pre>
+                </div>
+            <li>
+                <div>
+                    <p>create a certificate signing request
+                    <pre>openssl req -new -key ca.key -out ca.csr</pre>
+                </div>
+            <li>
+                <div>
+                    <p>self-sign the request for the creation of the certificate
+                    <pre>openssl x509 -req -in ca.csr -out ca.crt -signkey ca.key</pre>                        </div>
+        </ul>
+        <p>Now you may want to check what actually happened.
+        <pre>openssl x509 -in ca.crt -text</pre>
+        <p>we just created the key (ca.key) and signed the certificate request: now we have a valid certificate (valid only for ourself).
+        <br>
+        <h2>step 2 - create the webserver certificates</h2>
+        <p>This step may be skipped if we have already a server certificate (a paid one from the trusted CAs).
+        <p>In order, we have to do these steps:
+        <ul>
+            <li>
+                <div>
+                    <p>create the key
+                    <pre>openssl genrsa -out example.com.key</pre>
+                </div>
+            <li>
+                <div>
+                    <p>create the signing request
+                    <pre>openssl req -new -key example.com.key -out example.com.csr</pre>
+                </div>
+            <li>
+                <div>
+                    <p>sign the webserver certificate
+                    <pre>openssl ca -in example.com.csr -cert ca.crt -keyfile ca.key -out example.com.crt
+                </div>
+        </ul>
+        <p>Again, we can check the generated certificate
+        <pre>openssl x509 -in example.com.crt -text</pre>
+        <h2>step 3 - first nginx.conf</h2>
+        <p>The first attempt to see if the server certificate works:
+        <pre>
+[...]
+http {
+    [...]
+    server {
+        listen 443;
+        server_name example.com;
+        ssl on;
+        ssl_certificate /path/of/my/example.com.crt;
+        ssl_certificate_key /path/of/my/example.com.key;
+    [...]
+}
+[...]
+        </pre>
+        <h2>step 4 - create a client test certificate</h2>
+        <p>Again the steps are key - request -sign, plus the pkcs12 export of the certificate, well known format by the web browsers:
+        <ul>
+            <li>
+                <div>
+                    <p>create the client key
+                    <pre>openssl genrsa -out client.key</pre>
+                </div>
+            <li>
+                <div>
+                    <p>create the signing request
+                    <pre>openssl req -new -key client.key -out client.csr</pre>
+                </div>
+            <li>
+                <div>
+                    <p>sign the request with the CA certificate
+                    <pre>openssl ca -in client.csr -cert ca.crt -keyfile ca.key -out client.crt</pre>
+                </div>
+            <li>
+                <div>
+                    <p>export the certificate in pkcs12 format
+                    <pre>openssl pkcs12 -export -clcerts -in client.crt -inkey client.key -out client.p12</pre>
+                </div>
+        </ul>
+        <h2>step 5 - setup the client authentication in nginx</h2>
+        <p>We have to edit the previous nginx.conf
+        <pre>
+[...]
+http {
+    [...]
+    server {
+        listen 443;
+        server_name example.com;
+        ssl on;
+        ssl_certificate /path/of/my/example.com.crt;
+        ssl_certificate_key /path/of/my/example.com.key;
+        [...]
+        ssl_client_certificate /path/of/my/ca.crt;
+        ssl_verify_client optional;
+        [...]
+        #example to get some custom headers with ssl infos
+        location / {
+            proxy_pass http://127.0.0.1:8080;
+            proxy_set_header X-SSL-client-serial $ssl_client_serial;
+            proxy_set_header X-SSL-client-s-dn $ssl_client_s_dn;
+            proxy_set_header X-SSL-client-i-dn $ssl_client_i_dn;
+            proxy_set_header X-SSL-client-session-id $ssl_session_id;
+            proxy_set_header X-SSL-client-verify $ssl_client_verify;
+        }
+    [...]
+}
+[...]
+        </pre>
+        <h2>step 6 - test all this stuff</h2>
+        <p>In the example configuration I picked the reverse-proxy example, so I'll create a backend server to display that everithing is working well.
+        <p>This task can be accomplished with almost every programming language and framework of choice (.net, java, python, ruby...).
+        <p>I'll create a node.js server just for the small effort that it require.
+        <p>The server code (server.js) will simply output a copy of the request(without the request body):
+        <pre>
+require('http').createServer(function(req, res) {
+    res.writeHead(200)
+    res.write("&lt;pre&gt;")
+    res.write(req.method + " " + req.url + " HTTP/" + req.httpVersion + "\n")
+   for (var name in req.headers) {
+        res.write(name + ": " + req.headers[name] + "\n")
+    }
+    res.end("&lt;/pre&gt;")
+}).listen(8080)
+        </pre>
+        <p>And launch it with:
+        <pre>node server.js</pre>
+        <h2>finally... test this stuff!</h2>
+        <p>The first run, without client certificates, this is the output pointing https://example.com:
+        <pre>
+GET /HTTP/1.0
+x-ssl-client-session-id: [...very long unique session id...]
+x-ssl-client-verify: NONE
+host: 127.0.0.1:8080
+connection: close
+user-agent: Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1
+accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+accept-language: en-us,en;q=0.5
+accept-encoding: gzip, deflate
+accept-charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+dnt: 1
+        </pre>
+        <p>Now I'll install the client certificate. In firefox go to <pre>Preferences &gt; Advanced &gt; View Certificates &gt; "Your certificates" tab &gt; Import</pre> and pick the client.p12 file.
+        <p>Now restart the browser (to get rid of the session id), and point again the browser to our website. This time firefox will ask wich client certificate to use. Select our client certificate and this happen:
+        <pre>
+GET /HTTP/1.0
+x-ssl-client-serial: 02
+x-ssl-client-s-dn: /C=AU/ST=Some-State/O=Internet Widgits Pty Ltd/CN=client_certificate
+x-ssl-client-i-dn: /C=AU/ST=Some-State/O=Internet Widgits Pty Ltd/CN=my_ca
+x-ssl-client-session-id: [...very long unique session id...]
+x-ssl-client-verify: SUCCESS
+host: 127.0.0.1:8080
+connection: close
+user-agent: Mozilla/5.0 (X11; Linux x86_64; rv:9.0.1) Gecko/20100101 Firefox/9.0.1
+accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+accept-language: en-us,en;q=0.5
+accept-encoding: gzip, deflate
+accept-charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+dnt: 1
+        </pre>
+        <h2>Troubleshooting</h2>
+        <p>I've tested the steps with archlinux, and encountered this small problems.
+        <p>The path /etc/ssl have to be replaced with /etc/openssl or something else in some systems
+        <i>openssl complains that /etc/ssl/index.txt can't be found</i>
+        <pre>touch /etc/ssl/index.txt</pre>
+        <i>openssl complains that /etc/ssl/serial can't be found</i>
+        <pre>echo 01 | tee /etc/ssl/serial</pre>
+        <i>openssl complains that the /etc/ssl/newcerts directory don't exists</i>
+        <pre>mkdir /etc/ssl/newcerts</pre>
+        <i>TXT_DB error number 2</i>
+        <p>We are signing two certificates with the same CA. Every operation is recorded by openssl in its database, we can clear everything if it's a test run, or revoke the signatures if we have the old certificates (the suitable action if we are replacing an expired certificate).
+        <p>To clean the mess instead, for our testing purpouses delete /etc/ssl/index.txt, /etc/ssl/serial and /etc/ssl/newcerts and start over with a fresh configuration.
+    </body>
+</html>
