@@ -179,7 +179,7 @@ dnt: 1
         <i>openssl complains that the /etc/ssl/newcerts directory don't exists</i>
         <pre>mkdir /etc/ssl/newcerts</pre>
         <i>TXT_DB error number 2</i>
-        <p>We are signing two certificates with the same CA. Every operation is recorded by openssl in its database, we can clear everything if it's a test run, or revoke the signatures if we have the old certificates (the suitable action if we are replacing an expired certificate).
+        <p>We are signing two certificates with the same CN. Every operation is recorded by openssl in its database, we can clear everything if it's a test run, or revoke the signatures if we have the old certificates (the suitable action if we are replacing an expired certificate).
         <p>To clean the mess instead, for our testing purpouses delete /etc/ssl/index.txt, /etc/ssl/serial and /etc/ssl/newcerts and start over with a fresh configuration.
     </body>
 </html>
