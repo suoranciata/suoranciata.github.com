@@ -2,10 +2,31 @@
 <html>
     <head>
         <title>suoranciata's pages</title>
+        <style>
+            body {
+                padding: 1em 2em 1em 2em;
+            }
+            h1,h2 {
+                font-family: sans-serif;
+            }
+            h1 {
+                font-size: 2em;
+            }
+            h2 {
+                font-size: 1.2em;
+            }
+            pre {
+                font-family: Liberation Mono, Courier New, monospace;
+                font-size: .7em;
+            }
+            p {
+                font-family: Liberation, Times New Roman, serif;
+            }
+        </style>
     </head>
     <body>
         <h1>HOWTO setup ssl client authentication with openssl, nginx, a backend of your choice and self signed certificates</h1>
-        <h3>step 1 - create the CA</h3>
+        <h2>step 1 - create the CA</h2>
         <p>A certification authority is required for signing client certificates, so the steps for creating one are these:
         <ul>
             <li>
@@ -26,7 +47,6 @@
         <p>Now you might want to check what actually happened.
         <pre>openssl x509 -in ca.crt -text</pre>
         <p>we just created the key (ca.key) and signed the certificate request: now we have a valid certificate (valid only for ourselves).
-        <br>
         <h2>step 2 - create the webserver certificate</h2>
         <p>This step can be skipped if we have already a server certificate (a paid one from the trusted CAs).
         <p>In order to create our webserver certificates we have to follow these steps:
@@ -121,7 +141,7 @@ http {
         <h2>step 6 - create a test server</h2>
         <p>In the example configuration I chose the reverse-proxy, so I'll create a backend server to display that everithing is working well.
         <p>This task can be accomplished with almost every programming language and framework of your choice (.net, java, python, ruby...).
-        <p>I'll create a node.js server just for the small effort that it require.
+        <p>I'll create a <a href="http://nodejs.org">node.js</a> server just for the small effort that it require.
         <p>The server code (server.js) will simply output a copy of the request(without the request body):
         <pre>
 require('http').createServer(function(req, res) {
@@ -172,14 +192,19 @@ dnt: 1
         <h2>Troubleshooting</h2>
         <p>I've tested the steps with archlinux and encountered these small problems.
         <p>The path /etc/ssl has to be replaced with /etc/openssl or something else in some systems</p>
-        <i>openssl complains that /etc/ssl/index.txt can't be found</i>
+        <p><i>openssl complains that /etc/ssl/index.txt can't be found</i>
         <pre>touch /etc/ssl/index.txt</pre>
-        <i>openssl complains that /etc/ssl/serial can't be found</i>
+        <p><i>openssl complains that /etc/ssl/serial can't be found</i>
         <pre>echo 01 | tee /etc/ssl/serial</pre>
-        <i>openssl complains that the /etc/ssl/newcerts directory don't exists</i>
+        <p><i>openssl complains that the /etc/ssl/newcerts directory don't exists</i>
         <pre>mkdir /etc/ssl/newcerts</pre>
-        <i>TXT_DB error number 2</i>
-        <p>We are signing two certificates with the same CN. Every operation is recorded by openssl in its database, we can clear everything if it's a test run, or revoke the signatures if we have the old certificates (the suitable action if we are replacing an expired certificate).
+        <p><i>TXT_DB error number 2</i>
+        <p>We are signing two certificates with the same common name (CN). Every operation is recorded by openssl in its database, we can clear everything if it's a test run, or revoke the signatures if we have the old certificates (the suitable action if we are replacing an expired certificate).
         <p>To clean the mess instead, for our testing purpouses delete /etc/ssl/index.txt, /etc/ssl/serial and /etc/ssl/newcerts and start over with a fresh configuration.
+        <h2>links</h2>
+        <ul>
+            <li><a href="http://www.openssl.org/docs/apps/openssl.html">openssl man page</a>
+            <li><a href="http://wiki.nginx.org/HttpSslModule">nginx wiki - HttpSslModule</a>
+        </ul>
     </body>
 </html>
