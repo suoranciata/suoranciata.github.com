@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>test configuration for nginx: serving static files and reverse proxy</title>
+        <link rel="stylesheet" type="text/css" href="style.css">
+    </head>
+    <body>
+        <h1>Sample nginx configuration for web application: serving static files and reverse proxy for dynamic requests in test environments</h1>
+        <p>Sometimes you need to serve static files and don't want to add to your api the static file server utility (because you will use nginx to serve that in production), so I did this configuration to be launched inside or outside a generic dynamic web server (java, ruby, python, node.js..)</p>
+        <pre>
+error_log /dev/stderr;
+pid nginx.pid;
+
+events {
+    worker_connections 64;
+}
+
+daemon off;
+
+http {
+    access_log /dev/stdout;
+    include /etc/nginx/conf/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 30;
+    gzip on;
+    server {
+        listen 9876;
+        server_name localhost;
+        location / {
+            root static;
+            try_files $uri $uri/index.htm @webapp;
+        }
+        location @webapp {
+            proxy_pass http://localhost:9877;
+        }
+    }
+}    
+        </pre>
+        <p>I placed this file in the nginx/ directory inside my app directory, and I'll invoke nginx using the command(assuming that $PWD is the base app directory):</p>
+        <pre>nginx -p $PWD/ -c nginx/nginx.conf</pre>
+        <p>The trailing / after $PWD is important. I added some code inside my coffee-script app to launch nginx and capture the standard output and standard error.</p>
+        <p>The -p flag set the path prefix to the current directory, so, say I'm at the prompt on the /home/user/app directory, the command will translate to:</p>
+        <pre>nginx -p /home/user/app/ -c nginx/nginx.conf</pre>
+        <p>The nginx.conf file will be placed in /home/user/app/nginx/ and the static resources directory will be placed in /home/user/app/static/</p>
+        <p>The warning <i>nginx: [alert] could not open error log file: open() "/var/log/nginx/error.log" failed (13: Permission denied)</i> warn that nginx cannot open the standard error file (it is the nginx error log file before the configuration is parsed).</p>
+    </body>
+</html>
