@@ -169,6 +169,21 @@ accept-encoding: gzip, deflate
 accept-charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
 dnt: 1
         </pre>
+        <h2>final - automate the generation</h2>
+        <p>This is a small shell script that I wrote to automate the generation of client certificates (batch generation).</p>
+        <pre>
+#!/bin/sh
+SERIAL=$(cat demoCA/serial)
+KEY=client-$SERIAL.key
+openssl genrsa -out $KEY
+SUBJECT="/C=AU/ST=Some-State/O=Internet Widgits Pty Ltd/CN=client-$SERIAL"
+CSR=client-$SERIAL.csr
+openssl req -new -subj $SUBJECT -key $KEY -out $CSR -batch
+CRT=client-$SERIAL.crt
+openssl ca -in $CSR -cert ca.crt -keyfile ca.key -out $CRT -batch
+P12=client-$SERIAL.p12
+openssl pkcs12 -export -clcerts -in $CRT -inkey $KEY -out $P12 -password pass:
+        </pre>
         <h2>Troubleshooting</h2>
         <p>I've tested the steps with archlinux and encountered these small problems.
         <p>The path /etc/ssl has to be replaced with /etc/openssl or something else in some systems</p>
