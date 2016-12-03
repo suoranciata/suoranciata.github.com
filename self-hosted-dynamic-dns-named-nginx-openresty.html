@@ -1,0 +1,177 @@
+<!doctype html>
+<html>
+  <head>
+    <title>self hosted dynamic dns using bind9 (named), nginx, openresty</title>
+    <link rel=stylesheet type=text/css href=style.css>
+  </head>
+  <body>
+    <h1>self hosted dynamic dns using bind9 (named) and openresty (nginx)</h1>
+    <p>
+      First step is to configure your domain properly.
+      My domain provider (<a href=http://www.gandi.net>gandi</a>) let me edit
+      my zone file, so I put in it the following content:
+    </p>
+    <pre>
+@ 10800 IN A 1.2.3.4
+ns 10800 IN A 1.2.3.4
+* 10800 IN CNAME example.org.
+*.ns 10800 IN NS ns
+    </pre>
+    <p>
+      The first line tell to get the ip of my vps server when asking the
+      dns record for example.org; the second line do the same for
+      ns.example.org; the third line says to get *.example.org pointing to
+      the same address of the bare domain (CNAME is like an alias); the last
+      line is the most interesting: the NS record says that *.ns.example.org
+      will be resolved by the dns server ns.example.org.
+      1.2.3.4 is a placeholder for the ip address of my vps server.
+      Depending on the provider you may have to wait minutes to hours before
+      the edit will propagate.
+    </p>
+    <p>
+      The next step is to install and start bind9 on your server; refer to your OS manual
+      to get the proper software running. Once I got it up and running
+      on port 53 I opened the /etc/named.conf file and added my zone section:
+    </p>
+    <pre>
+zone "example.org" {
+  type master;
+  file "dnsdb.example.org";
+  allow-update { localhost; };
+};
+    </pre>
+    <p>
+      With this configuration I told bind9 to get the zone information in
+      /var/named/dnsdb.example.org and that dns update requests are accepted
+      only if originating on localhost.
+    </p>
+    <p>
+      Next step is to create the zone file; I copied the empty.zone file
+      and edited the relevant bits, and added a record for ns.
+    </p>
+    <pre>
+$ORIGIN example.org.
+$TTL 1h
+
+@ 1D IN SOA example.org. root.example.org. (
+  2016120401 ; serial
+  1H ; refresh
+  15M ; retry
+  1W ; expiry
+  1D ) ; min ttl
+    1D IN NS ns.example.org.
+
+ns.example.org. 1D IN A 127.0.0.1
+    </pre>
+    <p>
+    After restarting named I tested the configuration inserting a
+    subdomain using nsupdate.
+    </p>
+    <pre>
+$ cat &gt; add_loopback.txt &lt;&lt;EOF
+server localhost
+zone example.org
+update add loopback.ns.example.org 3600 A 127.0.0.1
+show
+send
+EOF
+$ nsupdate add_loopback.txt
+Outgoing update query:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: UPDATE, status: NOERROR, id:      0
+;; flags:; ZONE: 0, PREREQ: 0, UPDATE: 0, ADDITIONAL: 0
+;; ZONE SECTION:
+;example.org&#09;&#09;&#09;IN&#09;SOA
+
+;;UPDATE SECTION:
+loopback.ns.example.org.&#09;3600&#09;IN&#09;A&#09;127.0.0.1
+
+$
+    </pre>
+    <p>
+      I checked that the result was public:
+    </p>
+    <pre>
+$ ping loopback.ns.example.org
+PING loopback.ns.example.org (127.0.0.1) 56(84) bytes of data.
+64 bytes from localhost.localdomain (127.0.0.1): icmp_seq=1 ttl=64 time=0.026 ms
+^C
+--- loopback.ns.example.org ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.026/0.026/0.026/0.000 ms
+    </pre>
+    <p>
+      Next step was getting openresty up and running on my server; again,
+      refer to your OS manuals and documentation.
+    </p>
+    <p>
+      I edited the openresty's nginx.conf. In my distribution it is
+      /opt/openresty/nginx/conf/nginx.conf.
+    </p>
+    <pre>
+  [...]
+  server {
+    listen 80;
+    server_name ns.example.org;
+    location /nsadmin {
+      content_by_lua_file conf/nsadmin.lua;
+    }
+  }
+  [...]
+    </pre>
+    <p>
+      I created the following nsadmin.lua script in the same directory
+      of nginx.conf file:
+    </p>
+    <pre>
+local key = ngx.var.arg_key
+local domain = ngx.var.arg_domain
+local ip = ngx.var.arg_ip
+
+fd = io.open("/opt/openresty/nginx/conf/credentials.txt")
+for line in fd:lines() do
+  local lkey, ldomain = line:match("^([^:]*):([^:]*)$")
+  if key == lkey and domain == ldomain then
+    if ip == nil then
+      break
+    end
+    ngx.log(ngx.DEBUG, "updating: k=" .. key .. " d=" .. domain .. " i=" .. ip)
+    local cmd = 'server localhost\n'
+    cmd = cmd .. 'zone example.org\n'
+    cmd = cmd .. 'update delete ' .. domain .. '.ns.example.org A\n'
+    cmd = cmd .. 'update add ' .. domain .. '.ns.example.org 3600 A ' .. ip .. '\n'
+    cmd = cmd .. 'show\n'
+    cmd = cmd .. 'send\n'
+    ngx.say('nsupdate command:\n' .. cmd)
+    p = io.popen("echo '" .. cmd .. "' | nsupdate 2&gt;&amp;1")
+    for pline in p:lines() do
+      ngx.say(pline .. "\n")
+    end
+    p.close()
+    return
+  end
+end
+fd:close()
+
+ngx.say("unauthorized")
+    </pre>
+    <p>
+      The credentials.txt file content is simple: one key:domain pair
+      per line:
+    </p>
+    <pre>
+mysecretpassword:mysubdomainname
+    </pre>
+    <p>
+      And finally after restarting openresty the server configuration
+      is complete.
+    </p>
+    <p>
+      On the client side I put in a cron job the update of the relevant
+      ip address (in my case it was the internal network address of a wifi
+      device, in a network where I can't get access to the dhcp administration):
+    </p>
+    <pre>
+      curl -v 'http://ns.example.org/nsadmin?key=mysecretpassword&domain=mysubdomainname&ip='$(ifdata -pa wlan0)
+    </pre>
+  </body>
+</html>
