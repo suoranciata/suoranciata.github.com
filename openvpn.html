@@ -37,7 +37,7 @@ openssl req -new -newkey <span style=color:red>rsa:4096 -utf8 -sha256 -days 3650
 openvpn --genkey --secret ta.key
         </pre>
         <p>
-          This key is used for tls-auth (hardened configuration).
+          This key is used for <code>tls-auth</code> (hardened configuration).
         </p>
       </li>
       <li>
@@ -83,7 +83,7 @@ verb 4</span>
           <br>
           For a better understanding of the directives check the comments on
           the example files (in my distribution are found in
-          /usr/share/openvpn/examples) and the man pages linked at the
+          <code>/usr/share/openvpn/examples</code>) and the man pages linked at the
           bottom of the page.
           <br>
           The logging directives are optional, but useful for diagnosing
@@ -106,7 +106,7 @@ systemctl start openvpn@server # to start the server
 systemctl enable openvpn@server # to persist the start of the service across reboots
         </pre>
         <p>
-          The part after the "@" sign is the name of the .conf file without
+        The part after the <code>"@"</code> sign is the name of the <code>.conf</code> file without
           the extension.
         </p>
       </li>
@@ -121,8 +121,8 @@ openssl req -new -newkey <span style=color:red>rsa:4096 -utf8 -sha256 -days 3650
         </pre>
         <p>
           Issue this command on the client, and copy the generated
-          client.csr file on the /etc/openvpn directory on the server.
-          Do not move the client.key file on the server, as the point is
+          <code>client.csr</code> file on the <code>/etc/openvpn</code> directory on the server.
+          Do not move the <code>client.key</code> file on the server, as the point is
           to keep the key secret on the machine and exchange only the
           public key.
         </p>
@@ -133,8 +133,8 @@ openssl req -new -newkey <span style=color:red>rsa:4096 -utf8 -sha256 -days 3650
 openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -out client.crt -CAcreateserial
         </pre>
         <p>
-          Copy back on the client the generated client.crt file
-          with ca.crt and ta.key.
+          Copy back on the client the generated <code>client.crt</code> file
+          with <code>ca.crt</code> and <code>ta.key</code>.
         </p>
       </li>
       <li>
@@ -159,7 +159,7 @@ verb 4
 <span style=color:red>redirect-gateway def1</span>
         </pre>
         <p>
-          I usually go for /etc/openvpn/client.conf; replace the highlighted
+        I usually go for <code>/etc/openvpn/client.conf</code>; replace the highlighted
           part with the server hostname or the server ip address and port
           and protocol according to the server configuration.
           <br>
@@ -186,14 +186,14 @@ systemctl enable openvpn@client # to persist the start of the service across reb
     </ol>
     <h2>Create .ovpn files</h2>
     <p>
-      This part explain how to create a .ovpn file, for windows clients.
+      This part explain how to create a <code>.ovpn</code> file, for windows clients.
       A .ovpn file is a bundle of the configuration with the required
       keys and certificates.
       <br>
       I usually generate the keys on my linux desktop machine and bundle
-      an .ovpn file if needed for my windows devices.
+      an <code>.ovpn</code> file if needed for my windows devices.
     </p>
-    <p>A typical .ovpn contains:</p>
+    <p>A typical <code>.ovpn</code> contains:</p>
     <ul>
       <li>the content of the client config file</li>
       <li>a &lt;ca&gt; tag, with the content of the ca.crt file</li>
@@ -204,7 +204,7 @@ systemctl enable openvpn@client # to persist the start of the service across reb
     <h3>Windows specific tweaking</h3>
     <p>
       Windows client software can be downloaded in the links at the bottom.
-      To start the client service right click on the .ovpn file and select
+      To start the client service right click on the <code>.ovpn</code> file and select
       "Start OpenVPN on this config file."
       <br>
       Windows specific tweak is to change the network location from
