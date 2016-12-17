@@ -1,0 +1,244 @@
+<!doctype html>
+<html>
+  <head>
+    <title>set-up openvpn (server and client)</title>
+    <link rel=stylesheet type=text/css href=style.css>
+  </head>
+  <body>
+    <h1>set-up for openvpn (server and client) - no easy-rsa required</h1>
+    <p>
+      Before starting, I usually issue the key generation command on my
+      home computer instead of remote vps server, because it has more
+      entropy sources and is faster to gather the needed random bits.
+      After the generation I will copy the files on the server as needed.
+    </p>
+    <h2>Server set-up</h2>
+    <ol>
+      <li>
+          <p>Create the Certification Authority (CA):</p>
+          <pre>cd /etc/openvpn
+openssl req -new -newkey <span style=color:red>rsa:4096 -utf8 -sha256 -days 3650</span>  -nodes -x509 -subj "/CN=<span style=color:red>server-cname</span>" -keyout ca.key -out ca.crt
+          </pre>
+          <p>
+            This command will generate the private key (ca.key) and the
+            public key (ca.crt); the highlighted parts can be customized
+            to specify a better security settings (key type, key length,
+            algorithm, shorter expiration) and to customize the cname
+            (usually I just go with the machine hostname).
+            <br>
+            To simplify the configuration I will use the same certificate
+            for the CA and the server. To make two distinct certs see the
+            client certificate generation section.
+          </p>
+      </li>
+      <li>
+        <p>Create the shared secret key:</p>
+        <pre>
+openvpn --genkey --secret ta.key
+        </pre>
+        <p>
+          This key is used for tls-auth (hardened configuration)
+        </p>
+      </li>
+      <li>
+        <p>Create the Diffie-Hellman parameters:</p>
+        <pre>
+openssl dhparam -out dh.pem 4096
+        </pre>
+        <p>
+          The Diffie-Hellman parameters is used for hardening the
+          configuration (seeds openssl key exchange with a prime and a
+          generator).
+        </p>
+      </li>
+      <li>
+        <p>Sample server configuration:</p>
+        <pre>
+port <span style=color:red>1194</span>
+proto <span style=color:red>udp</span>
+dev tun
+ca ca.crt
+cert ca.crt
+key ca.key
+dh dh.pem
+server 10.8.0.0 255.255.255.0
+topology subnet
+ifconfig-pool-persist ipp.txt
+client-to-client
+keepalive 10 120
+tls-auth ta.key 0
+cipher AES-256-CBC
+persist-key
+persist-tun
+<span style=color:red>status openvpn-status.log
+log-append openvpn.log
+verb 4</span>
+        </pre>
+        <p>
+          Short and simple configuration for the server, that uses the files
+          generated in the previous steps; place it in a file, I usually go
+          for /etc/openvpn/server.conf.
+          <br>
+          client-to-client enable the ability for clients to see each other.
+          <br>
+          For a better understanding of the directives check the comments on
+          the example files (in my distribution are placed in
+          /usr/share/openvpn/examples) and the man pages linked at the
+          bottom of the page.
+          <br>
+          The logging directives are optional, but useful for diagnosting
+          a networking issue. Once the network is up and running they can be
+          commented out. The same apply for the client configuration.
+        </p>
+      </li>
+      <li>
+        <p>
+          Start the service.
+          <br>
+          Check your linux distribution or operative system manual on how to
+          start and openvpn server daemon and load the proper configuration
+          file.
+          <br>
+          For reference, in ArchLinux with systemd init the commands are:
+        </p>
+        <pre>
+systemctl start openvpn@server # to start the server
+systemctl enable openvpn@server # to persist the start of the service across reboots
+        </pre>
+        <p>
+          The part after the "@" sign is the name of the .conf file without
+          the extension.
+        </p>
+      </li>
+    </ol>
+    <h2>Client set-up</h2>
+    <ol>
+      <li>
+        <p>Create the client key and sign request:</p>
+        <pre>
+cd /etc/openvpn
+openssl req -new -newkey <span style=color:red>rsa:4096 -utf8 -sha256 -days 3650</span> -nodes -subj "/CN=<span style=color:red>client-cname</span>" -keyout client.key -out client.csr
+        </pre>
+        <p>
+          Issue this command on the client, and copy the generated
+          client.csr file on the /etc/openvpn directory on the server.
+          Do not move the client.key file on the server, as the point is
+          to keep the key secret on the machine and exchange only the
+          public key.
+        </p>
+      </li>
+      <li>
+        <p>Sign the request on the server:</p>
+        <pre>
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -out client.crt -CAcreateserial
+        </pre>
+        <p>
+          Copy back on the client the generated client.crt file
+          with ca.crt and ta.key.
+        </p>
+      </li>
+      <li>
+        <p>Sample client configuration (tested on linux client):</p>
+        <pre>
+client
+dev tun
+remote <span style=color:red>server_host 1194</span>
+proto <span style=color:red>udp</span>
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+ca ca.crt
+cert client.crt
+key client.key
+tls-auth ta.key 1
+cipher AES-256-CBC
+status openvpn-status.log
+log-append openvpn.log
+verb 4
+<span style=color:red>redirect-gateway def1</span>
+        </pre>
+        <p>
+          I usually go for /etc/openvpn/client.conf; replace the highlighted
+          part with the server hostname or the server ip address and port
+          and protocol according to the server configuration.
+          <br>
+          The redirect-gateway directive add proper routes to forward all
+          the client machine traffic through the vpn tunnel; removing it
+          will still have the virtual network functional.
+        </p>
+      </li>
+      <li>
+        <p>
+          Start the service.
+          <br>
+          Check your linux distribution or operative system manual on how to
+          start and openvpn client daemon and load the proper configuration
+          file.
+          <br>
+          Again, as in the server, in ArchLinux with systemd the commands are:
+        </p>
+        <pre>
+systemctl start openvpn@client # to start the client service
+systemctl enable openvpn@client # to persist the start of the service across reboots
+        </pre>
+      </li>
+    </ol>
+    <h2>Create .ovpn files</h2>
+    <p>
+      This part explain how to create an .ovpn file, for windows clients.
+      An .ovpn file is a bundle of the configuration with the required
+      keys and certificates.
+      <br>
+      I usually do the key generation on my linux desktop machine and bundle
+      an .ovpn file if needed for my windows devices.
+      <br>
+      Create a file with the content generated from:
+    </p>
+    <ul>
+      <li>
+        the content of the client config file, replace with 
+        <code>[inline]</code> the path of certificates and keys
+        and add the directive <b>tls-direction 1</b>
+      </li>
+      <li>
+        a &lt;ca&gt; tag, with the content of the ca.crt file
+      </li>
+      <li>
+        a &lt;cert&gt; tag, with the content of the client.crt file
+      </li>
+      <li>
+        a &lt;key&gt; tag, with the content of the client.key file
+      </li>
+      <li>
+        a &lt;tls-auth&gt; tag, with the content of the ta.key file
+      </li>
+    </ul>
+    <p>
+      The configuration is tested with a windows 10 client, other OSes
+      may need tweaking.
+      <br>
+      Windows specific tweak is to change the network location from
+      Public to Private. See <a href=https://www.tenforums.com/tutorials/6815-network-location-set-private-public-windows-10-a.html>this tutorial</a>.
+      <br>
+      Check these scripts for OS differences and .ovpn generation
+      differences between them:
+      <ul>
+        <li><a href=https://gist.github.com/trovao/18e428b5a758df24455b>trovao/ovpn-writer.sh (windows?)</a></li>
+        <li><a href=https://gist.github.com/BoeingX/a073569b8aabf856be292ed6d000cbbc>BoeingX/ovpn-writer.sh (unified format)</a></li>
+        <li><a href=https://gist.github.com/graysky2/54cdf26c702239eee36cfde3865177e3>graysky2/ovpn-writer.sh (iOS)</a></li>
+        <li><a href=https://gist.github.com/sfunk1x/014cfb5c1150a3a67ad708d1b7adbc9a>sfunk1x/ovpn-writer.sh (android)</a></li>
+      </ul>
+    </p>
+    <h2>links</h2>
+    <p>
+      <a href=https://openvpn.net/index.php/open-source/documentation/howto.html>OpenVPN HOWTO</a>
+      <br>
+      <a href=https://community.openvpn.net/openvpn/wiki/Hardening>OpenVPN Hardening</a>
+      <br>
+      <a href=https://openvpn.net/index.php/open-source/documentation/manuals/65-openvpn-20x-manpage.html>OpenVPN Man Page</a>
+      <br>
+      <a href=https://openvpn.net/index.php/open-source/downloads.html>OpenVPN installer downloads (for windows clients)</a>
+    </p>
+  </body>
+</html>
