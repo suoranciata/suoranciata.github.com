@@ -7,10 +7,10 @@
   <body>
     <h1>set-up for openvpn (server and client) - no easy-rsa required</h1>
     <p>
-      Before starting, I usually issue the key generation command on my
-      home computer instead of remote vps server, because it has more
+      Before starting, I usually generate the keys on my
+      home computer instead of remote vps server, as it has more
       entropy sources and is faster to gather the needed random bits.
-      After the generation I will copy the files on the server as needed.
+      Then I copy the generated files on the server as needed.
     </p>
     <h2>Server set-up</h2>
     <ol>
@@ -20,9 +20,9 @@
 openssl req -new -newkey <span style=color:red>rsa:4096 -utf8 -sha256 -days 3650</span>  -nodes -x509 -subj "/CN=<span style=color:red>server-cname</span>" -keyout ca.key -out ca.crt
           </pre>
           <p>
-            This command will generate the private key (ca.key) and the
-            public key (ca.crt); the highlighted parts can be customized
-            to specify a better security settings (key type, key length,
+            This command will generate the private key (<code>ca.key</code>) and the
+            public key (<code>ca.crt</code>); highlighted parts can be edited
+            to specify better security settings (key type, key length,
             algorithm, shorter expiration) and to customize the cname
             (usually I just go with the machine hostname).
             <br>
@@ -37,7 +37,7 @@ openssl req -new -newkey <span style=color:red>rsa:4096 -utf8 -sha256 -days 3650
 openvpn --genkey --secret ta.key
         </pre>
         <p>
-          This key is used for tls-auth (hardened configuration)
+          This key is used for tls-auth (hardened configuration).
         </p>
       </li>
       <li>
@@ -75,18 +75,18 @@ log-append openvpn.log
 verb 4</span>
         </pre>
         <p>
-          Short and simple configuration for the server, that uses the files
-          generated in the previous steps; place it in a file, I usually go
+          Short and simple configuration for the server, using the previously
+          generated files; place the above directives in a file, I usually go
           for /etc/openvpn/server.conf.
           <br>
           client-to-client enable the ability for clients to see each other.
           <br>
           For a better understanding of the directives check the comments on
-          the example files (in my distribution are placed in
+          the example files (in my distribution are found in
           /usr/share/openvpn/examples) and the man pages linked at the
           bottom of the page.
           <br>
-          The logging directives are optional, but useful for diagnosting
+          The logging directives are optional, but useful for diagnosing
           a networking issue. Once the network is up and running they can be
           commented out. The same apply for the client configuration.
         </p>
@@ -95,11 +95,11 @@ verb 4</span>
         <p>
           Start the service.
           <br>
-          Check your linux distribution or operative system manual on how to
-          start and openvpn server daemon and load the proper configuration
+          Check your linux distribution or operating system manual on how to
+          start an openvpn server daemon and load the proper configuration
           file.
           <br>
-          For reference, in ArchLinux with systemd init the commands are:
+          For reference, in Arch Linux with systemd init the commands are:
         </p>
         <pre>
 systemctl start openvpn@server # to start the server
@@ -176,7 +176,7 @@ verb 4
           start and openvpn client daemon and load the proper configuration
           file.
           <br>
-          Again, as in the server, in ArchLinux with systemd the commands are:
+          Again, as for the server, in Arch Linux with systemd the commands are:
         </p>
         <pre>
 systemctl start openvpn@client # to start the client service
@@ -186,40 +186,103 @@ systemctl enable openvpn@client # to persist the start of the service across reb
     </ol>
     <h2>Create .ovpn files</h2>
     <p>
-      This part explain how to create an .ovpn file, for windows clients.
-      An .ovpn file is a bundle of the configuration with the required
+      This part explain how to create a .ovpn file, for windows clients.
+      A .ovpn file is a bundle of the configuration with the required
       keys and certificates.
       <br>
-      I usually do the key generation on my linux desktop machine and bundle
+      I usually generate the keys on my linux desktop machine and bundle
       an .ovpn file if needed for my windows devices.
-      <br>
-      Create a file with the content generated from:
     </p>
+    <p>A typical .ovpn contains:</p>
     <ul>
-      <li>
-        the content of the client config file, replace with 
-        <code>[inline]</code> the path of certificates and keys
-        and add the directive <b>tls-direction 1</b>
-      </li>
-      <li>
-        a &lt;ca&gt; tag, with the content of the ca.crt file
-      </li>
-      <li>
-        a &lt;cert&gt; tag, with the content of the client.crt file
-      </li>
-      <li>
-        a &lt;key&gt; tag, with the content of the client.key file
-      </li>
-      <li>
-        a &lt;tls-auth&gt; tag, with the content of the ta.key file
-      </li>
+      <li>the content of the client config file</li>
+      <li>a &lt;ca&gt; tag, with the content of the ca.crt file</li>
+      <li>a &lt;cert&gt; tag, with the content of the client.crt file</li>
+      <li>a &lt;key&gt; tag, with the content of the client.key file</li>
+      <li>a &lt;tls-auth&gt; tag, with the content of the ta.key file</li>
     </ul>
+    <h3>Windows specific tweaking</h3>
     <p>
-      The configuration is tested with a windows 10 client, other OSes
-      may need tweaking.
+      Windows client software can be downloaded in the links at the bottom.
+      To start the client service right click on the .ovpn file and select
+      "Start OpenVPN on this config file."
       <br>
       Windows specific tweak is to change the network location from
       Public to Private. See <a href=https://www.tenforums.com/tutorials/6815-network-location-set-private-public-windows-10-a.html>this tutorial</a>.
+    </p>
+    <p>An example .ovpn file for windows (bold for the differences with the client configuration seen before):</p>
+    <pre>
+client
+dev tun
+remote server_host 1194
+proto udp
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+<b>ca [inline]
+cert [inline]
+key [inline]
+tls-auth [inline] 1</b>
+cipher AES-256-CBC
+status openvpn-status.log
+log-append openvpn.log
+verb 4
+<b>key-direction 1
+&lt;ca&gt;
+[...content of ca.crt...]
+&lt;/ca&gt;
+&lt;cert&gt;
+[...content of client.crt...]
+&lt;/cert&gt;
+&lt;key&gt;
+[...content of client.key...]
+&lt;/key&gt;
+&lt;tls-auth&gt;
+[...content of ta.key...]
+&lt;/tls-auth&gt;</b>
+    </pre>
+    <h3>Android specific tweaking</h3>
+    <p>
+      On Android 7.1.1 I can't get working this configuration with the
+      official app OpenVPN Connect in Play Store (I was connected, I got
+      the address and the routes working, but no connectivity); I could
+      get a successful session with OpenVPN for Android, installed via
+      f-droid store.
+      <br>
+      The android specific tweak remove the [inline] parts of the
+      configuration in the .ovpn file.
+      <br>
+      Here is how an example .ovpn for android looks like:
+    </p>
+    <pre>
+client
+dev tun
+remote server_host 1194
+proto udp
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+cipher AES-256-CBC
+status openvpn-status.log
+log-append openvpn.log
+verb 4
+<b>key-direction 1
+&lt;ca&gt;
+[...content of ca.crt...]
+&lt;/ca&gt;
+&lt;cert&gt;
+[...content of client.crt...]
+&lt;/cert&gt;
+&lt;key&gt;
+[...content of client.key...]
+&lt;/key&gt;
+&lt;tls-auth&gt;
+[...content of ta.key...]
+&lt;/tls-auth&gt;</b>
+    </pre>
+    <p>
       <br>
       Check these scripts for OS differences and .ovpn generation
       differences between them:
