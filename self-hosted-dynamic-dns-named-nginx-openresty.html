@@ -173,5 +173,25 @@ mysecretpassword:mysubdomainname
     <pre>
       curl -v 'http://ns.example.org/nsadmin?key=mysecretpassword&domain=mysubdomainname&ip='$(ifdata -pa wlan0)
     </pre>
+    <p>
+	A handy windows .bat to update the domain ip address:
+    </p>
+    <pre>
+      @if (@This==@IsBatch) @then
+	wscript //E:JScript "%~dpnx0"
+	exit /b
+      @end
+      var http = WScript.CreateObject('Msxml2.XMLHTTP.6.0');
+      http.open('GET','http://icanhazip.com', false);
+      http.setRequestHeader('User-Agent','curl');
+      http.send();
+      var externalIP = http.responseText;
+      var updateUrl = "http://ns.example.org/nsadmin?key=mysecretpassword&domain=mysubdomainname&ip=" + externalIP;
+      http = WScript.CreateObject('Msxml2.XMLHTTP.6.0');
+      http.open('GET', updateUrl, false);
+      http.setRequestHeader('User-Agent','curl');
+      http.send();
+      WScript.Echo(http.responseText);
+      WScript.Quit(0);
   </body>
 </html>
